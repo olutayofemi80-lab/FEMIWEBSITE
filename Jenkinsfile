@@ -22,7 +22,7 @@ pipeline {
                 script {
                     def scannerHome = tool 'SonarQube'
 
-                    withSonarQubeEnv('SonarQube') {
+                    withSonarQubeEnv('SonarQubetoken') {
                         sh """
                         ${scannerHome}/bin/sonar-scanner \
                         -Dsonar.projectKey=FEMIWEBSITE \
