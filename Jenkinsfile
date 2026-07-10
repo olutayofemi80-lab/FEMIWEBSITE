@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    tools {
-        sonarQubeScanner 'SonarScanner'
-    }
-
     environment {
         IMAGE_NAME = "femiwebsite"
         IMAGE_TAG = "project"
@@ -23,40 +19,57 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh '''
-                        sonar-scanner \
+                script {
+                    def scannerHome = tool 'SonarQube'
+
+                    withSonarQubeEnv('SonarQube') {
+                        sh """
+                        ${scannerHome}/bin/sonar-scanner \
                         -Dsonar.projectKey=FEMIWEBSITE \
                         -Dsonar.projectName=FEMIWEBSITE \
-                        -Dsonar.sources=.
-                    '''
+                        -Dsonar.sources=. \
+                        -Dsonar.sourceEncoding=UTF-8
+                        """
+                    }
                 }
             }
         }
 
         stage('Trivy Filesystem Scan') {
             steps {
-                sh 'trivy fs --severity HIGH,CRITICAL .'
+                sh '''
+                trivy fs \
+                --severity HIGH,CRITICAL \
+                --no-progress \
+                .
+                '''
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .'
+                sh '''
+                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                '''
             }
         }
 
         stage('Trivy Image Scan') {
             steps {
-                sh 'trivy image --severity HIGH,CRITICAL ${IMAGE_NAME}:${IMAGE_TAG}'
+                sh '''
+                trivy image \
+                --severity HIGH,CRITICAL \
+                --no-progress \
+                ${IMAGE_NAME}:${IMAGE_TAG}
+                '''
             }
         }
 
         stage('Stop Old Container') {
             steps {
                 sh '''
-                    docker stop ${CONTAINER_NAME} || true
-                    docker rm ${CONTAINER_NAME} || true
+                docker stop ${CONTAINER_NAME} || true
+                docker rm ${CONTAINER_NAME} || true
                 '''
             }
         }
@@ -64,26 +77,27 @@ pipeline {
         stage('Run New Container') {
             steps {
                 sh '''
-                    docker run -d \
-                    --name ${CONTAINER_NAME} \
-                    -p ${HOST_PORT}:${CONTAINER_PORT} \
-                    ${IMAGE_NAME}:${IMAGE_TAG}
+                docker run -d \
+                --name ${CONTAINER_NAME} \
+                -p ${HOST_PORT}:${CONTAINER_PORT} \
+                ${IMAGE_NAME}:${IMAGE_TAG}
                 '''
             }
         }
     }
 
     post {
-        always {
-            archiveArtifacts artifacts: '*.txt', allowEmptyArchive: true
-        }
 
         success {
-            echo "Deployment completed successfully!"
+            echo 'Deployment completed successfully!'
         }
 
         failure {
-            echo "Deployment failed!"
+            echo 'Deployment failed!'
+        }
+
+        always {
+            cleanWs()
         }
     }
 }
